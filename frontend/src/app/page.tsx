@@ -21,30 +21,10 @@ type PredictionResult = {
 };
 
 const features = [
-  {
-    name: "sepal_length",
-    label: "Sepal Length",
-    min: 4.3,
-    max: 7.9,
-  },
-  {
-    name: "sepal_width",
-    label: "Sepal Width",
-    min: 2.0,
-    max: 4.4,
-  },
-  {
-    name: "petal_length",
-    label: "Petal Length",
-    min: 1.0,
-    max: 6.9,
-  },
-  {
-    name: "petal_width",
-    label: "Petal Width",
-    min: 0.1,
-    max: 2.5,
-  },
+  { name: "sepal_length", label: "Sepal Length", min: 4.3, max: 7.9 },
+  { name: "sepal_width", label: "Sepal Width", min: 2.0, max: 4.4 },
+  { name: "petal_length", label: "Petal Length", min: 1.0, max: 6.9 },
+  { name: "petal_width", label: "Petal Width", min: 0.1, max: 2.5 },
 ];
 
 export default function Home() {
@@ -64,13 +44,24 @@ export default function Home() {
   const [modelsLoading, setModelsLoading] = useState(true);
   const [performanceLoading, setPerformanceLoading] = useState(true);
   const [error, setError] = useState("");
+  const [darkMode, setDarkMode] = useState(false);
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("iris-theme");
+
+    if (savedTheme === "dark") {
+      setDarkMode(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("iris-theme", darkMode ? "dark" : "light");
+  }, [darkMode]);
 
   useEffect(() => {
     const fetchModels = async () => {
       try {
-        const response = await fetch(
-          "http://127.0.0.1:8000/models"
-        );
+        const response = await fetch("http://127.0.0.1:8000/models");
 
         if (!response.ok) {
           throw new Error("Failed to load models");
@@ -102,7 +93,6 @@ export default function Home() {
         }
 
         const data = await response.json();
-
         setPerformance(data.models);
       } catch (error) {
         console.error(error);
@@ -126,36 +116,67 @@ export default function Home() {
       return;
     }
 
+    const numericValues = {
+      sepal_length: Number(measurements.sepal_length),
+      sepal_width: Number(measurements.sepal_width),
+      petal_length: Number(measurements.petal_length),
+      petal_width: Number(measurements.petal_width),
+    };
+
+    for (const feature of features) {
+      const value =
+        numericValues[feature.name as keyof typeof numericValues];
+
+      if (Number.isNaN(value)) {
+        setError(`Please enter a valid number for ${feature.label}.`);
+        return;
+      }
+
+      if (value < feature.min || value > feature.max) {
+        setError(
+          `${feature.label} must be between ${feature.min} and ${feature.max} cm.`
+        );
+        return;
+      }
+    }
+
     setLoading(true);
 
     try {
-      const response = await fetch(
-        "http://127.0.0.1:8000/predict",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model,
-            sepal_length: Number(measurements.sepal_length),
-            sepal_width: Number(measurements.sepal_width),
-            petal_length: Number(measurements.petal_length),
-            petal_width: Number(measurements.petal_width),
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Prediction request failed");
-      }
+      const response = await fetch("http://127.0.0.1:8000/predict", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          ...numericValues,
+        }),
+      });
 
       const data = await response.json();
+
+      if (!response.ok) {
+        if (Array.isArray(data.detail)) {
+          const messages = data.detail.map(
+            (error: { msg: string }) => error.msg
+          );
+
+          throw new Error(messages.join(" "));
+        }
+
+        throw new Error(data.detail || "Prediction request failed.");
+      }
 
       setResult(data);
     } catch (error) {
       console.error(error);
-      setError("Could not get a prediction. Is the backend running?");
+
+      if (error instanceof Error) {
+        setError(error.message);
+      } else {
+        setError("Could not get a prediction. Is the backend running?");
+      }
     } finally {
       setLoading(false);
     }
@@ -174,58 +195,100 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-zinc-50 px-4 py-10 text-zinc-900 sm:px-6">
+    <main
+      className={`min-h-screen px-4 py-8 transition-colors duration-300 sm:px-6 sm:py-10 ${
+        darkMode
+          ? "bg-zinc-950 text-zinc-100"
+          : "bg-zinc-50 text-zinc-900"
+      }`}
+    >
       <div className="mx-auto max-w-5xl">
+        {/* Header */}
         <header className="mb-10">
-          <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-zinc-500">
-            Machine Learning Project
-          </p>
+          <div className="flex items-start justify-between gap-6">
+            <div>
+              <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
+                Iris Flower Classification
+              </h1>
 
-          <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-            Iris Flower Classification
-          </h1>
+              <p
+                className={`mt-4 whitespace-nowrap text-sm sm:text-base ${
+                  darkMode ? "text-zinc-400" : "text-zinc-600"
+                }`}
+              >
+                Enter the four flower measurements and use a trained
+                classification model to predict the Iris species.
+              </p>
+            </div>
 
-          <p className="mt-4 max-w-2xl text-base leading-7 text-zinc-600">
-            Enter the four flower measurements and use one of the
-            trained classification models to predict the Iris
-            species.
-          </p>
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className={`flex shrink-0 items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition ${
+                darkMode
+                  ? "border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
+                  : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100"
+              }`}
+              aria-label="Toggle dark mode"
+            >
+              <span className="text-base">
+                {darkMode ? "☀" : "☾"}
+              </span>
+              <span>{darkMode ? "Light" : "Dark"}</span>
+            </button>
+          </div>
         </header>
 
         <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
-          <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm sm:p-8">
+          {/* Prediction Form */}
+          <section
+            className={`rounded-2xl border p-6 shadow-sm transition-colors duration-300 sm:p-8 ${
+              darkMode
+                ? "border-zinc-800 bg-zinc-900"
+                : "border-zinc-200 bg-white"
+            }`}
+          >
             <div className="mb-8">
               <h2 className="text-xl font-semibold">
                 Make a prediction
               </h2>
 
-              <p className="mt-1 text-sm text-zinc-500">
+              <p
+                className={`mt-1 text-sm ${
+                  darkMode ? "text-zinc-400" : "text-zinc-500"
+                }`}
+              >
                 Select a model and provide the flower measurements.
               </p>
             </div>
 
+            {/* Model Selection */}
             <div>
               <label className="text-sm font-medium">
                 Classification Model
               </label>
 
               {modelsLoading ? (
-                <div className="mt-2 rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-500">
+                <div
+                  className={`mt-2 rounded-xl border p-3 text-sm ${
+                    darkMode
+                      ? "border-zinc-700 bg-zinc-950 text-zinc-400"
+                      : "border-zinc-200 bg-zinc-50 text-zinc-500"
+                  }`}
+                >
                   Loading models...
                 </div>
               ) : (
                 <select
                   value={model}
-                  onChange={(event) =>
-                    setModel(event.target.value)
-                  }
-                  className="mt-2 w-full rounded-xl border border-zinc-300 bg-white p-3 outline-none transition focus:border-zinc-900"
+                  onChange={(event) => setModel(event.target.value)}
+                  className={`mt-2 w-full rounded-xl border p-3 outline-none transition ${
+                    darkMode
+                      ? "border-zinc-700 bg-zinc-950 text-zinc-100 focus:border-zinc-400"
+                      : "border-zinc-300 bg-white text-zinc-900 focus:border-zinc-900"
+                  }`}
                 >
                   {models.map((modelOption) => (
-                    <option
-                      key={modelOption.id}
-                      value={modelOption.id}
-                    >
+                    <option key={modelOption.id} value={modelOption.id}>
                       {modelOption.name}
                     </option>
                   ))}
@@ -233,13 +296,16 @@ export default function Home() {
               )}
             </div>
 
+            {/* Measurements */}
             <div className="mt-8">
               <div className="mb-4">
-                <h3 className="font-semibold">
-                  Flower Measurements
-                </h3>
+                <h3 className="font-semibold">Flower Measurements</h3>
 
-                <p className="text-sm text-zinc-500">
+                <p
+                  className={`text-sm ${
+                    darkMode ? "text-zinc-400" : "text-zinc-500"
+                  }`}
+                >
                   All measurements are in centimeters.
                 </p>
               </div>
@@ -251,7 +317,11 @@ export default function Home() {
                       {feature.label}
                     </label>
 
-                    <p className="mt-1 text-xs text-zinc-500">
+                    <p
+                      className={`mt-1 text-xs ${
+                        darkMode ? "text-zinc-500" : "text-zinc-500"
+                      }`}
+                    >
                       Valid range: {feature.min}–{feature.max}
                     </p>
 
@@ -271,7 +341,11 @@ export default function Home() {
                           [feature.name]: event.target.value,
                         })
                       }
-                      className="mt-2 w-full rounded-xl border border-zinc-300 p-3 outline-none transition focus:border-zinc-900"
+                      className={`mt-2 w-full rounded-xl border p-3 outline-none transition ${
+                        darkMode
+                          ? "border-zinc-700 bg-zinc-950 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-400"
+                          : "border-zinc-300 bg-white text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-900"
+                      }`}
                       placeholder="Enter value"
                     />
                   </div>
@@ -279,8 +353,15 @@ export default function Home() {
               </div>
             </div>
 
+            {/* Error */}
             {error && (
-              <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              <div
+                className={`mt-6 rounded-xl border p-4 text-sm ${
+                  darkMode
+                    ? "border-red-900 bg-red-950/50 text-red-300"
+                    : "border-red-200 bg-red-50 text-red-700"
+                }`}
+              >
                 {error}
               </div>
             )}
@@ -288,15 +369,30 @@ export default function Home() {
             <button
               onClick={handlePredict}
               disabled={loading || modelsLoading}
-              className="mt-8 w-full rounded-xl bg-zinc-900 px-4 py-3 font-medium text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className={`mt-8 w-full rounded-xl px-4 py-3 font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                darkMode
+                  ? "bg-white text-zinc-900 hover:bg-zinc-200"
+                  : "bg-zinc-900 text-white hover:bg-zinc-700"
+              }`}
             >
               {loading ? "Analyzing..." : "Predict Species"}
             </button>
           </section>
 
-          <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm sm:p-8">
+          {/* Prediction Result */}
+          <section
+            className={`rounded-2xl border p-6 shadow-sm transition-colors duration-300 sm:p-8 ${
+              darkMode
+                ? "border-zinc-800 bg-zinc-900"
+                : "border-zinc-200 bg-white"
+            }`}
+          >
             <div>
-              <p className="text-sm font-semibold uppercase tracking-widest text-zinc-500">
+              <p
+                className={`text-sm font-semibold uppercase tracking-widest ${
+                  darkMode ? "text-zinc-500" : "text-zinc-500"
+                }`}
+              >
                 Result
               </p>
 
@@ -307,8 +403,16 @@ export default function Home() {
 
             {result ? (
               <div className="mt-8">
-                <div className="rounded-xl bg-zinc-100 p-5">
-                  <p className="text-sm text-zinc-500">
+                <div
+                  className={`rounded-xl p-5 ${
+                    darkMode ? "bg-zinc-950" : "bg-zinc-100"
+                  }`}
+                >
+                  <p
+                    className={`text-sm ${
+                      darkMode ? "text-zinc-400" : "text-zinc-500"
+                    }`}
+                  >
                     Predicted species
                   </p>
 
@@ -316,11 +420,19 @@ export default function Home() {
                     {result.prediction}
                   </p>
 
-                  <p className="mt-2 text-sm text-zinc-600">
+                  <p
+                    className={`mt-2 text-sm ${
+                      darkMode ? "text-zinc-400" : "text-zinc-600"
+                    }`}
+                  >
                     {getPredictionDescription(result.prediction)}
                   </p>
 
-                  <p className="mt-4 text-xs text-zinc-500">
+                  <p
+                    className={`mt-4 text-xs ${
+                      darkMode ? "text-zinc-500" : "text-zinc-500"
+                    }`}
+                  >
                     Model used: {result.model}
                   </p>
                 </div>
@@ -339,14 +451,28 @@ export default function Home() {
                               {species}
                             </span>
 
-                            <span className="text-zinc-500">
+                            <span
+                              className={
+                                darkMode
+                                  ? "text-zinc-400"
+                                  : "text-zinc-500"
+                              }
+                            >
                               {(probability * 100).toFixed(2)}%
                             </span>
                           </div>
 
-                          <div className="h-2 overflow-hidden rounded-full bg-zinc-200">
+                          <div
+                            className={`h-2 overflow-hidden rounded-full ${
+                              darkMode
+                                ? "bg-zinc-700"
+                                : "bg-zinc-200"
+                            }`}
+                          >
                             <div
-                              className="h-full rounded-full bg-zinc-900 transition-all duration-500"
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                darkMode ? "bg-white" : "bg-zinc-900"
+                              }`}
                               style={{
                                 width: `${probability * 100}%`,
                               }}
@@ -359,12 +485,26 @@ export default function Home() {
                 </div>
               </div>
             ) : (
-              <div className="mt-8 rounded-xl border border-dashed border-zinc-300 p-6 text-center">
-                <p className="font-medium text-zinc-600">
+              <div
+                className={`mt-8 rounded-xl border border-dashed p-6 text-center ${
+                  darkMode
+                    ? "border-zinc-700"
+                    : "border-zinc-300"
+                }`}
+              >
+                <p
+                  className={`font-medium ${
+                    darkMode ? "text-zinc-300" : "text-zinc-600"
+                  }`}
+                >
                   No prediction yet
                 </p>
 
-                <p className="mt-2 text-sm text-zinc-500">
+                <p
+                  className={`mt-2 text-sm ${
+                    darkMode ? "text-zinc-500" : "text-zinc-500"
+                  }`}
+                >
                   Enter the flower measurements and run the classifier.
                 </p>
               </div>
@@ -372,10 +512,20 @@ export default function Home() {
           </section>
         </div>
 
-        {/* Model performance */}
-        <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm sm:p-8">
+        {/* Model Performance */}
+        <section
+          className={`mt-6 rounded-2xl border p-6 shadow-sm transition-colors duration-300 sm:p-8 ${
+            darkMode
+              ? "border-zinc-800 bg-zinc-900"
+              : "border-zinc-200 bg-white"
+          }`}
+        >
           <div>
-            <p className="text-sm font-semibold uppercase tracking-widest text-zinc-500">
+            <p
+              className={`text-sm font-semibold uppercase tracking-widest ${
+                darkMode ? "text-zinc-500" : "text-zinc-500"
+              }`}
+            >
               Evaluation
             </p>
 
@@ -383,29 +533,41 @@ export default function Home() {
               Model Performance
             </h2>
 
-            <p className="mt-1 text-sm text-zinc-500">
+            <p
+              className={`mt-1 text-sm ${
+                darkMode ? "text-zinc-400" : "text-zinc-500"
+              }`}
+            >
               Results from 5-fold cross-validation on the training set
               and evaluation on the held-out test set.
             </p>
           </div>
 
           {performanceLoading ? (
-            <p className="mt-6 text-sm text-zinc-500">
+            <p
+              className={`mt-6 text-sm ${
+                darkMode ? "text-zinc-500" : "text-zinc-500"
+              }`}
+            >
               Loading performance data...
             </p>
           ) : (
             <div className="mt-6 overflow-x-auto">
               <table className="w-full min-w-[500px] text-left text-sm">
                 <thead>
-                  <tr className="border-b border-zinc-200 text-zinc-500">
+                  <tr
+                    className={`border-b ${
+                      darkMode
+                        ? "border-zinc-700 text-zinc-400"
+                        : "border-zinc-200 text-zinc-500"
+                    }`}
+                  >
                     <th className="px-4 py-3 font-medium">
                       Model
                     </th>
-
                     <th className="px-4 py-3 font-medium">
                       CV Accuracy
                     </th>
-
                     <th className="px-4 py-3 font-medium">
                       Test Accuracy
                     </th>
@@ -416,7 +578,11 @@ export default function Home() {
                   {performance.map((item) => (
                     <tr
                       key={item.id}
-                      className="border-b border-zinc-100 last:border-0"
+                      className={`border-b last:border-0 ${
+                        darkMode
+                          ? "border-zinc-800"
+                          : "border-zinc-100"
+                      }`}
                     >
                       <td className="px-4 py-4 font-medium">
                         {item.name}
@@ -437,7 +603,11 @@ export default function Home() {
           )}
         </section>
 
-        <footer className="mt-8 text-center text-sm text-zinc-500">
+        <footer
+          className={`mt-8 text-center text-sm ${
+            darkMode ? "text-zinc-600" : "text-zinc-500"
+          }`}
+        >
           Built with Next.js, FastAPI, and scikit-learn
         </footer>
       </div>
