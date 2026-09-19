@@ -7,14 +7,49 @@ type Model = {
   name: string;
 };
 
+type ModelPerformance = {
+  id: string;
+  name: string;
+  cv_accuracy: number;
+  test_accuracy: number;
+};
+
 type PredictionResult = {
   model: string;
   prediction: string;
   probabilities: Record<string, number>;
 };
 
+const features = [
+  {
+    name: "sepal_length",
+    label: "Sepal Length",
+    min: 4.3,
+    max: 7.9,
+  },
+  {
+    name: "sepal_width",
+    label: "Sepal Width",
+    min: 2.0,
+    max: 4.4,
+  },
+  {
+    name: "petal_length",
+    label: "Petal Length",
+    min: 1.0,
+    max: 6.9,
+  },
+  {
+    name: "petal_width",
+    label: "Petal Width",
+    min: 0.1,
+    max: 2.5,
+  },
+];
+
 export default function Home() {
   const [models, setModels] = useState<Model[]>([]);
+  const [performance, setPerformance] = useState<ModelPerformance[]>([]);
   const [model, setModel] = useState("knn");
 
   const [measurements, setMeasurements] = useState({
@@ -27,34 +62,8 @@ export default function Home() {
   const [result, setResult] = useState<PredictionResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [modelsLoading, setModelsLoading] = useState(true);
+  const [performanceLoading, setPerformanceLoading] = useState(true);
   const [error, setError] = useState("");
-
-  const features = [
-    {
-      name: "sepal_length",
-      label: "Sepal Length",
-      min: 4.3,
-      max: 7.9,
-    },
-    {
-      name: "sepal_width",
-      label: "Sepal Width",
-      min: 2.0,
-      max: 4.4,
-    },
-    {
-      name: "petal_length",
-      label: "Petal Length",
-      min: 1.0,
-      max: 6.9,
-    },
-    {
-      name: "petal_width",
-      label: "Petal Width",
-      min: 0.1,
-      max: 2.5,
-    },
-  ];
 
   useEffect(() => {
     const fetchModels = async () => {
@@ -82,13 +91,42 @@ export default function Home() {
       }
     };
 
+    const fetchPerformance = async () => {
+      try {
+        const response = await fetch(
+          "http://127.0.0.1:8000/model-performance"
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to load model performance");
+        }
+
+        const data = await response.json();
+
+        setPerformance(data.models);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setPerformanceLoading(false);
+      }
+    };
+
     fetchModels();
+    fetchPerformance();
   }, []);
 
   const handlePredict = async () => {
-    setLoading(true);
-    setResult(null);
     setError("");
+    setResult(null);
+
+    const values = Object.values(measurements);
+
+    if (values.some((value) => value === "")) {
+      setError("Please enter all four measurements.");
+      return;
+    }
+
+    setLoading(true);
 
     try {
       const response = await fetch(
@@ -117,148 +155,291 @@ export default function Home() {
       setResult(data);
     } catch (error) {
       console.error(error);
-      setError("Could not get a prediction.");
+      setError("Could not get a prediction. Is the backend running?");
     } finally {
       setLoading(false);
     }
   };
 
+  const getPredictionDescription = (prediction: string) => {
+    if (prediction === "Setosa") {
+      return "The measurements most closely match Iris Setosa.";
+    }
+
+    if (prediction === "Versicolor") {
+      return "The measurements most closely match Iris Versicolor.";
+    }
+
+    return "The measurements most closely match Iris Virginica.";
+  };
+
   return (
-    <main className="min-h-screen p-8">
-      <div className="mx-auto max-w-3xl">
-        <h1 className="text-4xl font-bold">
-          Iris Flower Classification
-        </h1>
+    <main className="min-h-screen bg-zinc-50 px-4 py-10 text-zinc-900 sm:px-6">
+      <div className="mx-auto max-w-5xl">
+        <header className="mb-10">
+          <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-zinc-500">
+            Machine Learning Project
+          </p>
 
-        <p className="mt-3 text-gray-600">
-          Predict the species of an Iris flower using a machine
-          learning model.
-        </p>
+          <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
+            Iris Flower Classification
+          </h1>
 
-        <div className="mt-8 space-y-6">
-          <div>
-            <label className="block font-medium">
-              Model
-            </label>
+          <p className="mt-4 max-w-2xl text-base leading-7 text-zinc-600">
+            Enter the four flower measurements and use one of the
+            trained classification models to predict the Iris
+            species.
+          </p>
+        </header>
 
-            {modelsLoading ? (
-              <p className="mt-2 text-sm text-gray-500">
-                Loading models...
-              </p>
-            ) : (
-              <select
-                value={model}
-                onChange={(event) =>
-                  setModel(event.target.value)
-                }
-                className="mt-2 w-full rounded-lg border p-3"
-              >
-                {models.map((modelOption) => (
-                  <option
-                    key={modelOption.id}
-                    value={modelOption.id}
-                  >
-                    {modelOption.name}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-
-          <div>
-            <h2 className="text-xl font-semibold">
-              Flower Measurements
-            </h2>
-
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              {features.map((feature) => (
-                <div key={feature.name}>
-                  <label className="block font-medium">
-                    {feature.label}
-                  </label>
-
-                  <p className="mt-1 text-sm text-gray-500">
-                    Range: {feature.min} - {feature.max} cm
-                  </p>
-
-                  <input
-                    type="number"
-                    step="0.1"
-                    min={feature.min}
-                    max={feature.max}
-                    value={
-                      measurements[
-                        feature.name as keyof typeof measurements
-                      ]
-                    }
-                    onChange={(event) =>
-                      setMeasurements({
-                        ...measurements,
-                        [feature.name]: event.target.value,
-                      })
-                    }
-                    className="mt-2 w-full rounded-lg border p-3"
-                    placeholder={`Enter ${feature.label.toLowerCase()}`}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <button
-            onClick={handlePredict}
-            disabled={loading || modelsLoading}
-            className="w-full rounded-lg bg-black p-3 font-medium text-white disabled:opacity-50"
-          >
-            {loading ? "Predicting..." : "Predict Species"}
-          </button>
-
-          {error && (
-            <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-700">
-              {error}
-            </div>
-          )}
-
-          {result && (
-            <div className="rounded-lg border p-6">
+        <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
+          <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm sm:p-8">
+            <div className="mb-8">
               <h2 className="text-xl font-semibold">
-                Prediction Result
+                Make a prediction
               </h2>
 
-              <p className="mt-4 text-2xl font-bold">
-                {result.prediction}
+              <p className="mt-1 text-sm text-zinc-500">
+                Select a model and provide the flower measurements.
               </p>
+            </div>
 
-              <p className="mt-2 text-sm text-gray-500">
-                Model: {result.model}
-              </p>
+            <div>
+              <label className="text-sm font-medium">
+                Classification Model
+              </label>
 
-              <div className="mt-6 space-y-3">
-                {Object.entries(result.probabilities).map(
-                  ([species, probability]) => (
-                    <div key={species}>
-                      <div className="flex justify-between text-sm">
-                        <span>{species}</span>
-                        <span>
-                          {(probability * 100).toFixed(2)}%
-                        </span>
-                      </div>
+              {modelsLoading ? (
+                <div className="mt-2 rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-500">
+                  Loading models...
+                </div>
+              ) : (
+                <select
+                  value={model}
+                  onChange={(event) =>
+                    setModel(event.target.value)
+                  }
+                  className="mt-2 w-full rounded-xl border border-zinc-300 bg-white p-3 outline-none transition focus:border-zinc-900"
+                >
+                  {models.map((modelOption) => (
+                    <option
+                      key={modelOption.id}
+                      value={modelOption.id}
+                    >
+                      {modelOption.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
 
-                      <div className="mt-1 h-2 rounded-full bg-gray-200">
-                        <div
-                          className="h-2 rounded-full bg-black"
-                          style={{
-                            width: `${probability * 100}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  )
-                )}
+            <div className="mt-8">
+              <div className="mb-4">
+                <h3 className="font-semibold">
+                  Flower Measurements
+                </h3>
+
+                <p className="text-sm text-zinc-500">
+                  All measurements are in centimeters.
+                </p>
+              </div>
+
+              <div className="grid gap-5 sm:grid-cols-2">
+                {features.map((feature) => (
+                  <div key={feature.name}>
+                    <label className="text-sm font-medium">
+                      {feature.label}
+                    </label>
+
+                    <p className="mt-1 text-xs text-zinc-500">
+                      Valid range: {feature.min}–{feature.max}
+                    </p>
+
+                    <input
+                      type="number"
+                      step="0.1"
+                      min={feature.min}
+                      max={feature.max}
+                      value={
+                        measurements[
+                          feature.name as keyof typeof measurements
+                        ]
+                      }
+                      onChange={(event) =>
+                        setMeasurements({
+                          ...measurements,
+                          [feature.name]: event.target.value,
+                        })
+                      }
+                      className="mt-2 w-full rounded-xl border border-zinc-300 p-3 outline-none transition focus:border-zinc-900"
+                      placeholder="Enter value"
+                    />
+                  </div>
+                ))}
               </div>
             </div>
-          )}
+
+            {error && (
+              <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                {error}
+              </div>
+            )}
+
+            <button
+              onClick={handlePredict}
+              disabled={loading || modelsLoading}
+              className="mt-8 w-full rounded-xl bg-zinc-900 px-4 py-3 font-medium text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading ? "Analyzing..." : "Predict Species"}
+            </button>
+          </section>
+
+          <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm sm:p-8">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-widest text-zinc-500">
+                Result
+              </p>
+
+              <h2 className="mt-2 text-xl font-semibold">
+                Prediction
+              </h2>
+            </div>
+
+            {result ? (
+              <div className="mt-8">
+                <div className="rounded-xl bg-zinc-100 p-5">
+                  <p className="text-sm text-zinc-500">
+                    Predicted species
+                  </p>
+
+                  <p className="mt-1 text-3xl font-bold">
+                    {result.prediction}
+                  </p>
+
+                  <p className="mt-2 text-sm text-zinc-600">
+                    {getPredictionDescription(result.prediction)}
+                  </p>
+
+                  <p className="mt-4 text-xs text-zinc-500">
+                    Model used: {result.model}
+                  </p>
+                </div>
+
+                <div className="mt-8">
+                  <h3 className="font-semibold">
+                    Model probabilities
+                  </h3>
+
+                  <div className="mt-5 space-y-5">
+                    {Object.entries(result.probabilities).map(
+                      ([species, probability]) => (
+                        <div key={species}>
+                          <div className="mb-2 flex justify-between text-sm">
+                            <span className="font-medium">
+                              {species}
+                            </span>
+
+                            <span className="text-zinc-500">
+                              {(probability * 100).toFixed(2)}%
+                            </span>
+                          </div>
+
+                          <div className="h-2 overflow-hidden rounded-full bg-zinc-200">
+                            <div
+                              className="h-full rounded-full bg-zinc-900 transition-all duration-500"
+                              style={{
+                                width: `${probability * 100}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-8 rounded-xl border border-dashed border-zinc-300 p-6 text-center">
+                <p className="font-medium text-zinc-600">
+                  No prediction yet
+                </p>
+
+                <p className="mt-2 text-sm text-zinc-500">
+                  Enter the flower measurements and run the classifier.
+                </p>
+              </div>
+            )}
+          </section>
         </div>
+
+        {/* Model performance */}
+        <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm sm:p-8">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-widest text-zinc-500">
+              Evaluation
+            </p>
+
+            <h2 className="mt-2 text-xl font-semibold">
+              Model Performance
+            </h2>
+
+            <p className="mt-1 text-sm text-zinc-500">
+              Results from 5-fold cross-validation on the training set
+              and evaluation on the held-out test set.
+            </p>
+          </div>
+
+          {performanceLoading ? (
+            <p className="mt-6 text-sm text-zinc-500">
+              Loading performance data...
+            </p>
+          ) : (
+            <div className="mt-6 overflow-x-auto">
+              <table className="w-full min-w-[500px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-zinc-200 text-zinc-500">
+                    <th className="px-4 py-3 font-medium">
+                      Model
+                    </th>
+
+                    <th className="px-4 py-3 font-medium">
+                      CV Accuracy
+                    </th>
+
+                    <th className="px-4 py-3 font-medium">
+                      Test Accuracy
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {performance.map((item) => (
+                    <tr
+                      key={item.id}
+                      className="border-b border-zinc-100 last:border-0"
+                    >
+                      <td className="px-4 py-4 font-medium">
+                        {item.name}
+                      </td>
+
+                      <td className="px-4 py-4">
+                        {(item.cv_accuracy * 100).toFixed(2)}%
+                      </td>
+
+                      <td className="px-4 py-4">
+                        {(item.test_accuracy * 100).toFixed(2)}%
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <footer className="mt-8 text-center text-sm text-zinc-500">
+          Built with Next.js, FastAPI, and scikit-learn
+        </footer>
       </div>
     </main>
   );
