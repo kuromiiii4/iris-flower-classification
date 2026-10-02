@@ -20,6 +20,8 @@ type PredictionResult = {
   probabilities: Record<string, number>;
 };
 
+const API_URL = "https://kuromi.pythonanywhere.com";
+
 const features = [
   { name: "sepal_length", label: "Sepal Length", min: 4.3, max: 7.9 },
   { name: "sepal_width", label: "Sepal Width", min: 2.0, max: 4.4 },
@@ -61,7 +63,7 @@ export default function Home() {
   useEffect(() => {
     const fetchModels = async () => {
       try {
-        const response = await fetch("http://127.0.0.1:8000/models");
+        const response = await fetch(`${API_URL}/models`);
 
         if (!response.ok) {
           throw new Error("Failed to load models");
@@ -84,9 +86,7 @@ export default function Home() {
 
     const fetchPerformance = async () => {
       try {
-        const response = await fetch(
-          "http://127.0.0.1:8000/model-performance"
-        );
+        const response = await fetch(`${API_URL}/model-performance`);
 
         if (!response.ok) {
           throw new Error("Failed to load model performance");
@@ -143,7 +143,7 @@ export default function Home() {
     setLoading(true);
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/predict", {
+      const response = await fetch(`${API_URL}/predict`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
