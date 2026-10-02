@@ -4,6 +4,15 @@ A machine learning classification project that compares multiple supervised lear
 
 The project covers the complete workflow from data exploration and model evaluation to model persistence, API development, frontend integration, and input validation.
 
+## Live Demo
+
+[Try the Iris Flower Classification App](https://iris-flower-classification-coral.vercel.app/)
+
+## Deployment
+
+- Frontend: [Vercel](https://iris-flower-classification-coral.vercel.app/)
+- Backend: [PythonAnywhere](https://kuromi.pythonanywhere.com/)
+
 ## Features
 
 * Exploratory data analysis of the Iris dataset
